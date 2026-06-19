@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jornada de Recuperação</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="recovery-style.css">
+    <script src="https://unpkg.com/phosphor-icons"></script>
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <!-- Welcome Modal -->
+    <div class="modal active" id="welcomeModal" data-testid="welcome-modal">
+        <div class="modal-content welcome-content">
+            <h1 class="welcome-title">Bem-vindo à sua jornada</h1>
+            <p class="welcome-description">A coragem de começar é o primeiro passo para a transformação. Estamos aqui para apoiar você em cada momento desta jornada.</p>
+            
+            <div class="form-group">
+                <label class="form-label" for="addictionType">Gostaria de compartilhar, qual é o seu vício?</label>
+                <select id="addictionType" class="form-select" data-testid="addiction-select">
+                    <option value="">Selecione (opcional)</option>
+                    <option value="alcool">Álcool</option>
+                    <option value="tabaco">Tabaco / Cigarro</option>
+                    <option value="drogas">Drogas</option>
+                    <option value="pornografia">Pornografia/masturbação</option>
+                    <option value="jogos">Jogos de Azar</option>
+                    <option value="internet">Internet / Redes Sociais</option>
+                    <option value="videogames">Videogames</option>
+                    <option value="compras">Compras Compulsivas</option>
+                    <option value="comida">Comida / Açúcar</option>
+                    <option value="trabalho">Trabalho (Workaholism)</option>
+                    <option value="outro">Outro</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="customAddictionGroup" style="display: none;">
+                <label class="form-label" for="customAddiction">Especifique:</label>
+                <input type="text" id="customAddiction" class="form-input" placeholder="Digite aqui...">
+            </div>
+
+            <button class="btn btn-primary btn-large" id="startJourneyBtn" data-testid="start-journey-button">
+                Começar Minha Jornada
+            </button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+    <div class="apresentacao">
+        <h1 class="app-title">Sua Jornada</h1>
+        <p class="app-description">Dar o primeiro passo exige muita coragem, e você já fez isso. Este espaço é seu companheiro diário para registrar seu progresso, entender seus gatilhos e celebrar cada vitória rumo a uma vida saudável. Lembre-se: o foco é o progresso contínuo, um dia de cada vez.</p>
+        <p class="app-description">Regras do sistema: Para manter a precisão do seu painel, a recomendação é que o dia limpo seja registrado apenas no final da noite ou após completadas 24 horas após cada dia.</p>
+    </div>
+    
+    <div class="header-actions">
+        <button class="icon-btn" id="tipsBtn" data-testid="tips-button" title="Ver Dicas">
+            <i class="ph ph-lightbulb"></i>
+        </button>
+        <button class="icon-btn" id="settingsBtn" data-testid="settings-button" title="Configurações">
+            <i class="ph ph-gear"></i>
+        </button>
+    </div>
+</header>
+
+        <!-- Addiction Banner -->
+        <div class="addiction-banner" id="addictionBanner" style="display: none;">
+            <div class="banner-content">
+                <i class="ph ph-target"></i>
+                <span id="addictionText"></span>
+            </div>
+            <button class="banner-change" id="changeAddictionBtn">
+                <i class="ph ph-pencil-simple"></i>
+            </button>
+        </div>
+
+        <!-- Main Counter Section -->
+        <section class="hero-section">
+            <div class="counter-card">
+                <div class="counter-label">Dias Limpos</div>
+                <div class="counter-value" id="cleanDaysCounter" data-testid="clean-days-counter">0</div>
+                <div class="counter-subtitle" id="streakMessage">Continue assim!</div>
+            </div>
+
+            <div class="stats-row">
+                <div class="stat-item">
+                    <div class="stat-value" id="totalDaysValue" data-testid="total-days-value">0</div>
+                    <div class="stat-label">Total de Dias</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stumbleCountValue" data-testid="stumble-count-value">0</div>
+                    <div class="stat-label">Tropeços</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="successRateValue" data-testid="success-rate-value">100%</div>
+                    <div class="stat-label">Taxa de Sucesso</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Motivational Quote -->
+        <section class="quote-section" id="quoteSection" data-testid="quote-section">
+            <i class="ph ph-quotes quote-icon"></i>
+            <p class="quote-text" id="quoteText"></p>
+        </section>
+
+        <!-- Daily Tip (based on addiction) -->
+        <section class="tip-section" id="tipSection" style="display: none;">
+            <div class="tip-header">
+                <i class="ph ph-lightbulb-filament"></i>
+                <h3>Dica do Dia</h3>
+            </div>
+            <p class="tip-text" id="dailyTipText"></p>
+            <button class="btn-link" id="moreTipsBtn">
+                Ver mais dicas <i class="ph ph-arrow-right"></i>
+            </button>
+        </section>
+
+        <!-- Action Buttons -->
+        <section class="action-section">
+            <button class="btn btn-primary" id="markCleanDayBtn" data-testid="mark-clean-day-button">
+                <i class="ph ph-check-circle"></i>
+                Marcar Dia Limpo
+            </button>
+            <button class="btn btn-secondary" id="logStumbleBtn" data-testid="log-stumble-button">
+                <i class="ph ph-warning-circle"></i>
+                Registrar Tropeço
+            </button>
+        </section>
+
+        <!-- Daily Journal -->
+        <section class="journal-section">
+            <h2 class="section-title">Anotações de Hoje</h2>
+            <div class="journal-card">
+                <textarea 
+                    id="journalInput" 
+                    data-testid="journal-input"
+                    placeholder="Como você está se sentindo hoje? Quais desafios enfrentou? O que fez para se manter firme?"
+                    rows="6"></textarea>
+                <button class="btn btn-small" id="saveJournalBtn" data-testid="save-journal-button">
+                    <i class="ph ph-floppy-disk"></i>
+                    Salvar Anotação
+                </button>
+            </div>
+        </section>
+
+        <!-- Consistency Calendar -->
+        <section class="calendar-section">
+            <h2 class="section-title">Últimos 30 Dias</h2>
+            <div class="calendar-grid" id="calendarGrid" data-testid="calendar-grid"></div>
+            <div class="calendar-legend">
+                <div class="legend-item">
+                    <span class="legend-color legend-clean"></span>
+                    <span class="legend-text">Dia Limpo</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color legend-stumble"></span>
+                    <span class="legend-text">Tropeço</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color legend-empty"></span>
+                    <span class="legend-text">Sem Registro</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Journal History -->
+        <section class="history-section">
+            <h2 class="section-title">Histórico de Anotações</h2>
+            <div class="history-list" id="historyList" data-testid="history-list"></div>
+        </section>
+    </div>
+
+    <!-- Tips Modal -->
+    <div class="modal" id="tipsModal" data-testid="tips-modal">
+        <div class="modal-content modal-large">
+            <button class="modal-close" id="closeTipsModal" data-testid="close-tips-modal">
+                <i class="ph ph-x"></i>
+            </button>
+            <h2 class="modal-title">
+                <i class="ph ph-lightbulb" style="color: #8BA888;"></i>
+                Dicas Personalizadas
+            </h2>
+            <div id="tipsContent" class="tips-content"></div>
+        </div>
+    </div>
+
+    <!-- Stumble Modal -->
+    <div class="modal" id="stumbleModal" data-testid="stumble-modal">
+        <div class="modal-content">
+            <button class="modal-close" id="closeStumbleModal" data-testid="close-stumble-modal">
+                <i class="ph ph-x"></i>
+            </button>
+            <h2 class="modal-title">Registrar Tropeço</h2>
+            <p class="modal-description">Não se culpe. Cada dia é uma nova oportunidade.</p>
+            
+            <div class="form-group">
+                <label class="form-label">Onde isso aconteceu?</label>
+                <select id="environmentSelect" class="form-select" data-testid="environment-select">
+                    <option value="casa">Em Casa</option>
+                    <option value="trabalho">No Trabalho</option>
+                    <option value="social">Em Ambiente Social</option>
+                    <option value="online">Online</option>
+                    <option value="publico">Em Público</option>
+                    <option value="outro">Outro</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Como você está se sentindo? (opcional)</label>
+                <textarea 
+                    id="stumbleNote" 
+                    data-testid="stumble-note"
+                    placeholder="Escreva sobre o que aconteceu..."
+                    rows="4"></textarea>
+            </div>
+
+            <button class="btn btn-primary" id="confirmStumbleBtn" data-testid="confirm-stumble-button">
+                Confirmar Registro
+            </button>
+        </div>
+    </div>
+
+    <!-- Milestone Modal -->
+    <div class="modal" id="milestoneModal" data-testid="milestone-modal">
+        <div class="modal-content modal-celebration">
+            <button class="modal-close" id="closeMilestoneModal" data-testid="close-milestone-modal">
+                <i class="ph ph-x"></i>
+            </button>
+            <div class="celebration-icon">
+                <i class="ph ph-trophy"></i>
+            </div>
+            <h2 class="modal-title" id="milestoneTitle">Parabéns!</h2>
+            <p class="modal-description" id="milestoneMessage"></p>
+            <button class="btn btn-primary" id="closeCelebrationBtn" data-testid="close-celebration-button">
+                Continuar
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal" data-testid="settings-modal">
+        <div class="modal-content">
+            <button class="modal-close" id="closeSettingsModal" data-testid="close-settings-modal">
+                <i class="ph ph-x"></i>
+            </button>
+            <h2 class="modal-title">Configurações</h2>
+            
+            <div class="settings-section">
+                <h3 class="settings-subtitle">Seu Vício</h3>
+                <p class="settings-info" id="currentAddiction">Não especificado</p>
+                <button class="btn btn-secondary" id="editAddictionBtn">
+                    <i class="ph ph-pencil-simple"></i>
+                    Alterar Vício
+                </button>
+            </div>
+
+            <div class="settings-section">
+                <h3 class="settings-subtitle">Zona de Perigo</h3>
+                <button class="btn btn-danger" id="resetDataBtn" data-testid="reset-data-button">
+                    <i class="ph ph-warning"></i>
+                    Resetar Todos os Dados
+                </button>
+                <p class="settings-warning">Esta ação não pode ser desfeita.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast" data-testid="toast-notification">
+        <i class="ph ph-check-circle toast-icon"></i>
+        <span class="toast-message" id="toastMessage"></span>
+    </div>
+
+    <script src="recovery-app.js"></script>
+</body>
+</html>
