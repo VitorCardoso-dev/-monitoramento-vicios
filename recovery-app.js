@@ -25,7 +25,7 @@ const milestones = {
     3: "3 dias! Você está criando um novo hábito.",
     7: "Uma semana completa! Você provou que é capaz.",
     14: "Duas semanas! Sua determinação é admirável.",
-    21: "21 dias! Cientificamente, você está formando um novo hábito.",
+    21: "21 dias seguidos! Três semanas de constância: cada dia reforça sua nova rotina.",
     30: "Um mês inteiro! Isso é extraordinário.",
     60: "Dois meses! Você está em uma jornada incrível.",
     90: "90 dias! Três meses de força e determinação.",
@@ -35,6 +35,7 @@ const milestones = {
 
 const addictionTips = {
     "alcool": [
+        "Se você bebe todos os dias ou em grande quantidade, não pare de repente por conta própria: a abstinência pode ser perigosa. Procure um médico ou um CAPS AD antes.",
         "Evite pessoas, lugares ou situações que você associa diretamente ao consumo.",
         "Busque uma rede de apoio presencial ou online, como os Alcoólicos Anônimos (AA).",
         "Substitua o hábito: tenha sempre uma bebida não alcoólica (como água com gás ou suco) em mãos em eventos.",
@@ -83,10 +84,11 @@ const addictionTips = {
         "Faça uma lista de compras antes de sair e não leve o cartão de crédito, apenas o valor estipulado no débito ou dinheiro."
     ],
     "comida": [
-        "Não tenha alimentos-gatilho (doces, fast food, ultraprocessados) estocados nos armários de casa.",
+        "Evite estocar em casa os alimentos que mais disparam a compulsão, sem proibir alimentos de forma rígida: restrição severa costuma aumentar a vontade de comer.",
         "Beba um copo de água quando sentir vontade de comer fora de hora; o cérebro costuma confundir sede com fome.",
         "Planeje suas refeições da semana para não precisar tomar decisões quando estiver com muita fome e suscetível a impulsos.",
-        "Procure terapia para identificar se você está usando a comida para suprir emoções negativas."
+        "Procure terapia para identificar se você está usando a comida para suprir emoções negativas.",
+        "Se você restringe, compensa ou sente culpa intensa ao comer, procure um psicólogo e um nutricionista: pode ser um transtorno alimentar."
     ],
     "trabalho": [
         "Estabeleça e cumpra limites rigorosos de horário para ligar e desligar o computador diariamente.",
@@ -106,16 +108,36 @@ const addictionTips = {
 // 2. ESTADO GLOBAL DO APP E PRIVACIDADE
 // =====================================================================
 
-let appState = {
-    startDate: null,
-    cleanDays: 0,
-    totalDays: 0,
-    stumbles: [],
-    journals: [],
-    dailyLog: [],
-    lastCheckedDate: null,
-    milestonesShown: []
-};
+const STORAGE_KEY = 'recoveryTrackerState';
+const BACKUP_APP_ID = 'recovery-tracker';
+
+const HELP_HTML = `
+    <div class="help-box">
+        <p class="help-title"><i aria-hidden="true" class="ph ph-lifebuoy"></i> Precisa de ajuda agora?</p>
+        <ul>
+            <li><strong>CVV – 188</strong> (ligação gratuita, 24 h) ou cvv.org.br: apoio emocional e prevenção do suicídio.</li>
+            <li><strong>SAMU – 192</strong>: emergência médica (overdose, abstinência grave, risco de vida).</li>
+            <li><strong>CAPS AD</strong>: atendimento gratuito pelo SUS para álcool e outras drogas. Procure o mais próximo em uma UBS.</li>
+        </ul>
+        <p class="help-note">Este app é um diário de apoio e não substitui acompanhamento profissional.</p>
+    </div>`;
+
+function createDefaultState() {
+    return {
+        startDate: new Date(),
+        cleanDays: 0,        // total de dias marcados como limpos
+        totalDays: 0,        // dias desde o início da jornada
+        currentStreak: 0,    // dias limpos consecutivos até hoje
+        bestStreak: 0,       // maior sequência já alcançada
+        stumbles: [],
+        journals: [],
+        dailyLog: [],
+        lastCheckedDate: new Date(),
+        milestonesShown: []
+    };
+}
+
+let appState = createDefaultState();
 
 const privacyState = {
     isHidden: true,
@@ -124,189 +146,33 @@ const privacyState = {
 
 let selectedDateForEdit = null;
 let stumbleDateToLog = null;
+let lastFocusedElement = null;
 
 // =====================================================================
-// 3. LÓGICA PRINCIPAL E CORE
+// 3. UTILITÁRIOS
 // =====================================================================
 
-function initApp() {
-    injectDayEditModal();
-    loadState();
-    updateUI();
-    checkMilestones();
-    setupEventListeners();
-    displayRandomQuote();
+function escapeHTML(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+    ));
 }
 
-function loadState() {
-    const saved = localStorage.getItem('recoveryTrackerState');
-    if (saved) {
-        appState = JSON.parse(saved);
-        if (appState.startDate) appState.startDate = new Date(appState.startDate);
-        if (appState.lastCheckedDate) appState.lastCheckedDate = new Date(appState.lastCheckedDate);
-        appState.stumbles = appState.stumbles.map(s => ({ ...s, date: new Date(s.date) }));
-        appState.journals = appState.journals.map(j => ({ ...j, date: new Date(j.date) }));
-        if (!appState.dailyLog) appState.dailyLog = []; // Compatibilidade com versões anteriores
-        appState.dailyLog = appState.dailyLog.map(d => ({ ...d, date: new Date(d.date) }));
-    } else {
-        appState.startDate = new Date();
-        appState.lastCheckedDate = new Date();
-        saveState();
-    }
+function startOfDay(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
 }
 
-function saveState() {
-    localStorage.setItem('recoveryTrackerState', JSON.stringify(appState));
+function addDays(date, amount) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + amount);
+    return d;
 }
 
-function updateUI() {
-    calculateStats();
-    updateCounters();
-    updateCalendar();
-    updateHistory();
-}
-
-function calculateStats() {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    if (!appState.startDate) appState.startDate = today;
-    
-    const start = new Date(appState.startDate);
-    start.setHours(0, 0, 0, 0);
-    
-    // Total de dias desde que começou a jornada
-    appState.totalDays = Math.floor((today - start) / (1000 * 60 * 60 * 24)) + 1;
-    
-    // NOVO CÁLCULO DE DIAS LIMPOS (Apenas os dias efetivamente marcados)
-    let explicitCleanCount = 0;
-    const dayStatusMap = new Map();
-
-    // Mapeia os dias marcados como limpos
-    appState.dailyLog.forEach(log => {
-        const d = new Date(log.date); d.setHours(0,0,0,0);
-        if(log.type === 'clean') dayStatusMap.set(d.getTime(), 'clean');
-    });
-
-    // Sobrescreve com os tropeços (tropeço anula dia limpo)
-    appState.stumbles.forEach(s => {
-        const d = new Date(s.date); d.setHours(0,0,0,0);
-        dayStatusMap.set(d.getTime(), 'stumble');
-    });
-
-    // Conta quantos dias restaram como limpos
-    dayStatusMap.forEach((status) => {
-        if(status === 'clean') explicitCleanCount++;
-    });
-
-    appState.cleanDays = explicitCleanCount;
-}
-
-function updateCounters() {
-    document.getElementById('cleanDaysCounter').textContent = appState.cleanDays;
-    document.getElementById('totalDaysValue').textContent = appState.totalDays;
-    document.getElementById('stumbleCountValue').textContent = appState.stumbles.length;
-    
-    const totalMarkedDays = appState.cleanDays + appState.stumbles.length;
-    const successRate = totalMarkedDays > 0 ? Math.round((appState.cleanDays / totalMarkedDays) * 100) : 100;
-    document.getElementById('successRateValue').textContent = successRate + '%';
-    
-    const streakMsg = document.getElementById('streakMessage');
-    if (appState.cleanDays >= 30) streakMsg.textContent = 'Você está arrasando!';
-    else if (appState.cleanDays >= 7) streakMsg.textContent = 'Continue assim, você está indo muito bem!';
-    else if (appState.cleanDays >= 3) streakMsg.textContent = 'Ótimo progresso!';
-    else streakMsg.textContent = 'Um dia de cada vez!';
-}
-
-function updateCalendar() {
-    const calendarGrid = document.getElementById('calendarGrid');
-    calendarGrid.innerHTML = '';
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const startDate = new Date(appState.startDate);
-    startDate.setHours(0, 0, 0, 0);
-
-    // Constrói mapa de status para o calendário
-    const dayStatusMap = new Map();
-    appState.dailyLog.forEach(log => {
-        const d = new Date(log.date); d.setHours(0,0,0,0);
-        if(log.type === 'clean') dayStatusMap.set(d.getTime(), 'clean');
-    });
-    appState.stumbles.forEach(s => {
-        const d = new Date(s.date); d.setHours(0,0,0,0);
-        dayStatusMap.set(d.getTime(), 'stumble');
-    });
-    
-    for (let i = 29; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        date.setHours(0,0,0,0);
-        
-        const dayElement = document.createElement('div');
-        dayElement.className = 'calendar-day';
-        dayElement.textContent = date.getDate();
-        dayElement.title = formatDate(date);
-        
-        if (date < startDate) {
-            dayElement.classList.add('day-empty');
-            dayElement.style.opacity = '0.4';
-            dayElement.style.cursor = 'default';
-        } else {
-            const status = dayStatusMap.get(date.getTime());
-            if (status === 'stumble') {
-                dayElement.classList.add('day-stumble');
-            } else if (status === 'clean') {
-                dayElement.classList.add('day-clean');
-            } else {
-                dayElement.classList.add('day-empty');
-            }
-
-            // Adiciona evento de clique para edição retroativa
-            dayElement.addEventListener('click', () => {
-                selectedDateForEdit = new Date(date);
-                document.getElementById('dayEditTitle').textContent = `Dia ${formatDate(date)}`;
-                document.getElementById('dayEditModal').classList.add('active');
-            });
-        }
-        
-        calendarGrid.appendChild(dayElement);
-    }
-}
-
-function updateHistory() {
-    const historyList = document.getElementById('historyList');
-    
-    if (appState.journals.length === 0 && appState.stumbles.length === 0) {
-        historyList.innerHTML = '<div class="history-empty">Nenhuma anotação ainda. Comece registrando seu dia!</div>';
-        return;
-    }
-    
-    const allEntries = [
-        ...appState.journals.map(j => ({ ...j, type: 'journal' })),
-        ...appState.stumbles.map(s => ({ ...s, type: 'stumble' }))
-    ].sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    historyList.innerHTML = allEntries.slice(0, 10).map(entry => {
-        const isStumble = entry.type === 'stumble';
-        return `
-            <div class="history-item">
-                <div class="history-header">
-                    <div class="history-date">${formatDate(entry.date)}</div>
-                    <div class="history-badge ${isStumble ? 'badge-stumble' : 'badge-clean'}">
-                        ${isStumble ? 'Tropeço' : 'Anotação'}
-                    </div>
-                </div>
-                <div class="history-content">
-                    ${isStumble ? `
-                        <strong>Ambiente:</strong> ${getEnvironmentLabel(entry.environment)}<br>
-                        ${entry.note ? entry.note : 'Sem observações adicionais.'}
-                    ` : entry.content}
-                </div>
-            </div>
-        `;
-    }).join('');
+function formatDate(date) {
+    const d = new Date(date);
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 }
 
 function getEnvironmentLabel(env) {
@@ -314,14 +180,504 @@ function getEnvironmentLabel(env) {
     return labels[env] || env;
 }
 
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    document.getElementById('toastMessage').textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// --- Modais: abertura/fechamento com foco e Esc ---
+
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    lastFocusedElement = document.activeElement;
+    modal.classList.add('active');
+    const target = modal.querySelector('select, input:not([hidden]), textarea, button:not(.modal-close)') || modal.querySelector('button');
+    if (target) setTimeout(() => target.focus(), 0);
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('active');
+    if (lastFocusedElement && typeof lastFocusedElement.focus === 'function' && document.contains(lastFocusedElement)) {
+        lastFocusedElement.focus();
+    }
+}
+
+function canDismissModal(modal) {
+    // O modal de boas-vindas só pode ser fechado depois de existir uma escolha salva.
+    return modal.id !== 'welcomeModal' || !!localStorage.getItem('userRecoveryAddiction');
+}
+
+function handleModalKeydown(e) {
+    // Com mais de um modal aberto, o último no DOM é o que aparece por cima.
+    const activeModals = document.querySelectorAll('.modal.active');
+    const modal = activeModals[activeModals.length - 1];
+    if (!modal) return;
+
+    if (e.key === 'Escape' && canDismissModal(modal)) {
+        closeModal(modal.id);
+        return;
+    }
+
+    if (e.key === 'Tab') {
+        const focusables = Array.from(modal.querySelectorAll('button:not([disabled]), select, input:not([hidden]), textarea'))
+            .filter(el => !el.closest('[style*="display: none"]'));
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (!modal.contains(document.activeElement)) {
+            e.preventDefault();
+            first.focus();
+        } else if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+}
+
 // =====================================================================
-// 4. INTERAÇÕES E MODAIS NATIVOS
+// 4. PERSISTÊNCIA (com validação) E BACKUP
+// =====================================================================
+
+function normalizeState(raw) {
+    const base = createDefaultState();
+    if (!raw || typeof raw !== 'object') return base;
+
+    const toDate = v => {
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+    };
+    const list = v => (Array.isArray(v) ? v : []);
+
+    const out = { ...base };
+    out.startDate = toDate(raw.startDate) || base.startDate;
+    out.lastCheckedDate = toDate(raw.lastCheckedDate) || base.lastCheckedDate;
+    out.stumbles = list(raw.stumbles)
+        .map(s => ({ environment: 'outro', note: '', ...s, date: toDate(s && s.date) }))
+        .filter(s => s.date);
+    out.journals = list(raw.journals)
+        .map(j => ({ ...j, content: String((j && j.content) ?? ''), date: toDate(j && j.date) }))
+        .filter(j => j.date);
+    out.dailyLog = list(raw.dailyLog)
+        .map(d => ({ ...d, type: 'clean', date: toDate(d && d.date) }))
+        .filter(d => d.date);
+    out.milestonesShown = list(raw.milestonesShown).filter(n => Number.isFinite(n));
+    return out;
+}
+
+function loadState() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) {
+        appState = createDefaultState();
+        saveState();
+        return;
+    }
+    try {
+        appState = normalizeState(JSON.parse(saved));
+    } catch (err) {
+        // Dado corrompido: guarda uma cópia para recuperação manual e recomeça sem travar o app.
+        console.error('Estado salvo inválido:', err);
+        localStorage.setItem(STORAGE_KEY + '.corrompido', saved);
+        appState = createDefaultState();
+        saveState();
+        setTimeout(() => showToast('Não foi possível ler seus dados salvos. Uma cópia foi preservada.'), 500);
+    }
+}
+
+function saveState() {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    } catch (err) {
+        console.error('Falha ao salvar:', err);
+        showToast('Não foi possível salvar. O armazenamento do navegador pode estar cheio ou bloqueado.');
+    }
+}
+
+function exportData() {
+    const payload = {
+        app: BACKUP_APP_ID,
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        addiction: {
+            type: localStorage.getItem('userRecoveryAddiction'),
+            name: localStorage.getItem('userRecoveryAddictionName')
+        },
+        state: appState
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `jornada-backup-${stamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('Backup exportado. Guarde o arquivo em um lugar seguro.');
+}
+
+function importData(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onerror = () => showToast('Não foi possível ler o arquivo.');
+    reader.onload = () => {
+        let payload;
+        try {
+            payload = JSON.parse(reader.result);
+        } catch (err) {
+            showToast('Arquivo inválido: não é um JSON.');
+            return;
+        }
+        if (!payload || payload.app !== BACKUP_APP_ID || typeof payload.state !== 'object' || payload.state === null) {
+            showToast('Este arquivo não é um backup deste aplicativo.');
+            return;
+        }
+        if (!confirm('Importar este backup vai substituir os dados atuais deste navegador. Continuar?')) return;
+
+        const restored = normalizeState(payload.state);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+        const add = payload.addiction || {};
+        if (add.type) localStorage.setItem('userRecoveryAddiction', String(add.type));
+        if (add.name) localStorage.setItem('userRecoveryAddictionName', String(add.name));
+        window.location.reload();
+    };
+    reader.readAsText(file);
+}
+
+function resetData() {
+    if (confirm('Tem certeza que deseja apagar todos os dados? Esta ação não pode ser desfeita. Se quiser guardar uma cópia, exporte o backup antes.')) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STORAGE_KEY + '.corrompido');
+        localStorage.removeItem('userRecoveryAddiction');
+        localStorage.removeItem('userRecoveryAddictionName');
+        window.location.reload();
+    }
+}
+
+// =====================================================================
+// 5. LÓGICA PRINCIPAL: DIAS, SEQUÊNCIAS E MARCOS
+// =====================================================================
+
+function initApp() {
+    injectDayEditModal();
+    renderHelpBoxes();
+    loadState();
+    updateUI();
+    setupEventListeners();
+    displayRandomQuote();
+}
+
+function renderHelpBoxes() {
+    document.querySelectorAll('.help-slot').forEach(el => { el.innerHTML = HELP_HTML; });
+}
+
+// Mapa único (dia -> 'clean' | 'stumble'). Tropeço sempre prevalece sobre dia limpo.
+function getDayStatusMap() {
+    const map = new Map();
+    appState.dailyLog.forEach(log => {
+        if (log.type === 'clean') map.set(startOfDay(log.date).getTime(), 'clean');
+    });
+    appState.stumbles.forEach(s => map.set(startOfDay(s.date).getTime(), 'stumble'));
+    return map;
+}
+
+function calculateStreaks(statusMap) {
+    // Sequência atual: dias limpos consecutivos terminando hoje.
+    // Se hoje ainda não foi registrado, conta a partir de ontem (o dia pode ser marcado à noite).
+    let cursor = startOfDay(new Date());
+    const todayStatus = statusMap.get(cursor.getTime());
+    if (todayStatus === undefined) cursor = addDays(cursor, -1);
+
+    let current = 0;
+    while (statusMap.get(cursor.getTime()) === 'clean') {
+        current++;
+        cursor = addDays(cursor, -1);
+    }
+
+    // Melhor sequência: maior corrida de dias limpos consecutivos em todo o histórico.
+    const cleanTimes = [...statusMap.entries()]
+        .filter(([, status]) => status === 'clean')
+        .map(([time]) => time)
+        .sort((a, b) => a - b);
+
+    let best = 0;
+    let run = 0;
+    let previous = null;
+    cleanTimes.forEach(time => {
+        if (previous !== null && addDays(new Date(previous), 1).getTime() === time) run++;
+        else run = 1;
+        best = Math.max(best, run);
+        previous = time;
+    });
+
+    return { current, best: Math.max(best, current) };
+}
+
+function calculateStats() {
+    const today = startOfDay(new Date());
+    if (!appState.startDate) appState.startDate = today;
+
+    const start = startOfDay(appState.startDate);
+    appState.totalDays = Math.round((today - start) / 86400000) + 1;
+
+    const statusMap = getDayStatusMap();
+    appState.cleanDays = [...statusMap.values()].filter(s => s === 'clean').length;
+
+    const streaks = calculateStreaks(statusMap);
+    appState.currentStreak = streaks.current;
+    appState.bestStreak = Math.max(streaks.best, appState.bestStreak || 0);
+
+    return statusMap;
+}
+
+function updateUI() {
+    const statusMap = calculateStats();
+    updateCounters();
+    updateCalendar(statusMap);
+    updateHistory();
+    checkMilestones();
+}
+
+function updateCounters() {
+    document.getElementById('cleanDaysCounter').textContent = appState.currentStreak;
+    document.getElementById('bestStreakValue').textContent = appState.bestStreak;
+    document.getElementById('totalCleanValue').textContent = appState.cleanDays;
+    document.getElementById('stumbleCountValue').textContent = appState.stumbles.length;
+
+    const totalMarkedDays = appState.cleanDays + appState.stumbles.length;
+    const successRate = totalMarkedDays > 0 ? Math.round((appState.cleanDays / totalMarkedDays) * 100) : 100;
+    document.getElementById('successRateValue').textContent = successRate + '%';
+
+    const streak = appState.currentStreak;
+    const streakMsg = document.getElementById('streakMessage');
+    const unit = streak === 1 ? 'dia limpo seguido' : 'dias limpos seguidos';
+    let encouragement = 'Um dia de cada vez!';
+    if (streak >= 30) encouragement = 'Você está arrasando!';
+    else if (streak >= 7) encouragement = 'Continue assim, você está indo muito bem!';
+    else if (streak >= 3) encouragement = 'Ótimo progresso!';
+    else if (streak === 0 && appState.cleanDays > 0) encouragement = 'Recomeçar também é avançar. Hoje é um bom dia.';
+    streakMsg.textContent = `${unit} · ${encouragement}`;
+}
+
+// Mês exibido no calendário (não é salvo: ao abrir o app, começa no mês atual).
+let viewMonth = startOfMonth(new Date());
+
+function startOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function monthDiff(a, b) {
+    return (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
+}
+
+// Limites de navegação: do mês de início da jornada até o mês atual.
+function changeMonth(delta) {
+    const target = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + delta, 1);
+    const earliest = startOfMonth(appState.startDate);
+    const latest = startOfMonth(new Date());
+    if (target < earliest || target > latest) return;
+    viewMonth = target;
+    updateCalendar(getDayStatusMap());
+}
+
+function goToCurrentMonth() {
+    viewMonth = startOfMonth(new Date());
+    updateCalendar(getDayStatusMap());
+}
+
+function updateCalendar(statusMap) {
+    const calendarGrid = document.getElementById('calendarGrid');
+    calendarGrid.innerHTML = '';
+
+    const today = startOfDay(new Date());
+    const startDate = startOfDay(appState.startDate);
+    const labels = { clean: 'dia limpo', stumble: 'tropeço' };
+
+    const year = viewMonth.getFullYear();
+    const month = viewMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let cleanInMonth = 0;
+    let stumblesInMonth = 0;
+
+    // Espaços vazios para alinhar o dia 1 ao dia da semana correto (semana começa no domingo).
+    for (let i = 0; i < viewMonth.getDay(); i++) {
+        const blank = document.createElement('div');
+        blank.className = 'calendar-blank';
+        blank.setAttribute('aria-hidden', 'true');
+        calendarGrid.appendChild(blank);
+    }
+
+    for (let dayNumber = 1; dayNumber <= daysInMonth; dayNumber++) {
+        const date = new Date(year, month, dayNumber);
+        const status = statusMap.get(date.getTime());
+        const beforeStart = date < startDate;
+        const isFuture = date > today;
+
+        if (status === 'clean') cleanInMonth++;
+        if (status === 'stumble') stumblesInMonth++;
+
+        const dayElement = document.createElement('button');
+        dayElement.type = 'button';
+        dayElement.className = 'calendar-day';
+        dayElement.title = formatDate(date);
+        if (date.getTime() === today.getTime()) dayElement.classList.add('day-today');
+
+        const number = document.createElement('span');
+        number.textContent = dayNumber;
+        dayElement.appendChild(number);
+
+        if (beforeStart || isFuture) {
+            dayElement.classList.add('day-empty', 'day-disabled');
+            dayElement.disabled = true;
+            dayElement.setAttribute('aria-label', `${formatDate(date)}: ${isFuture ? 'ainda não chegou' : 'antes do início da jornada'}`);
+        } else {
+            dayElement.classList.add(status === 'clean' ? 'day-clean' : status === 'stumble' ? 'day-stumble' : 'day-empty');
+            dayElement.setAttribute('aria-label', `${formatDate(date)}: ${labels[status] || 'sem registro'}. Clique para editar.`);
+            if (status) {
+                const mark = document.createElement('span');
+                mark.className = 'day-mark';
+                mark.setAttribute('aria-hidden', 'true');
+                mark.textContent = status === 'clean' ? '✓' : '✕';
+                dayElement.appendChild(mark);
+            }
+            dayElement.addEventListener('click', () => {
+                selectedDateForEdit = new Date(date);
+                document.getElementById('dayEditTitle').textContent = `Dia ${formatDate(date)}`;
+                openModal('dayEditModal');
+            });
+        }
+        calendarGrid.appendChild(dayElement);
+    }
+
+    // Cabeçalho do mês, resumo e estado das setas
+    const rawLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(viewMonth);
+    document.getElementById('calendarMonthLabel').textContent = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    document.getElementById('calendarSummary').textContent =
+        `${plural(cleanInMonth, 'dia limpo', 'dias limpos')} · ${plural(stumblesInMonth, 'tropeço', 'tropeços')}`;
+
+    const latest = startOfMonth(new Date());
+    document.getElementById('prevMonthBtn').disabled = monthDiff(viewMonth, startOfMonth(appState.startDate)) <= 0;
+    document.getElementById('nextMonthBtn').disabled = monthDiff(viewMonth, latest) >= 0;
+    document.getElementById('todayMonthBtn').hidden = monthDiff(viewMonth, latest) === 0;
+}
+
+// Deslizar para os lados no celular: esquerda = próximo mês, direita = mês anterior.
+function setupCalendarSwipe() {
+    const grid = document.getElementById('calendarGrid');
+    let startX = null;
+    let startY = null;
+
+    grid.addEventListener('touchstart', e => {
+        const t = e.touches[0];
+        startX = t.clientX;
+        startY = t.clientY;
+    }, { passive: true });
+
+    grid.addEventListener('touchend', e => {
+        if (startX === null) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        startX = startY = null;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) changeMonth(dx < 0 ? 1 : -1);
+    }, { passive: true });
+}
+
+function updateHistory() {
+    const historyList = document.getElementById('historyList');
+
+    if (appState.journals.length === 0 && appState.stumbles.length === 0) {
+        historyList.innerHTML = '<div class="history-empty">Nenhuma anotação ainda. Comece registrando seu dia!</div>';
+        return;
+    }
+
+    const allEntries = [
+        ...appState.journals.map(j => ({ ...j, type: 'journal' })),
+        ...appState.stumbles.map(s => ({ ...s, type: 'stumble' }))
+    ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Todo texto digitado pelo usuário passa por escapeHTML antes de entrar no innerHTML.
+    historyList.innerHTML = allEntries.slice(0, 10).map(entry => {
+        const isStumble = entry.type === 'stumble';
+        const body = isStumble
+            ? `<strong>Ambiente:</strong> ${escapeHTML(getEnvironmentLabel(entry.environment))}<br>${entry.note ? escapeHTML(entry.note) : 'Sem observações adicionais.'}`
+            : escapeHTML(entry.content);
+        return `
+            <div class="history-item">
+                <div class="history-header">
+                    <div class="history-date">${formatDate(entry.date)}</div>
+                    <div class="history-badge ${isStumble ? 'badge-stumble' : 'badge-clean'}">
+                        ${isStumble ? 'Tropeço' : 'Anotação'}
+                    </div>
+                    <button type="button" class="btn-delete-entry" data-type="${entry.type}" data-ts="${new Date(entry.date).getTime()}" aria-label="Apagar este registro" title="Apagar este registro">
+                        <i aria-hidden="true" class="ph ph-trash"></i>
+                    </button>
+                </div>
+                <div class="history-content">${body}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function deleteHistoryEntry(type, timestamp) {
+    if (!confirm('Tem certeza que deseja apagar este registro permanentemente?')) return;
+
+    if (type === 'journal') {
+        appState.journals = appState.journals.filter(j => new Date(j.date).getTime() !== timestamp);
+    } else if (type === 'stumble') {
+        appState.stumbles = appState.stumbles.filter(s => new Date(s.date).getTime() !== timestamp);
+    }
+    saveState();
+    updateUI();
+    showToast('Registro removido com sucesso.');
+}
+
+// Marcos: baseados na sequência atual. Se vários foram alcançados de uma vez
+// (ex.: preenchimento retroativo), celebra o maior e marca os anteriores como vistos.
+function checkMilestones() {
+    const streak = appState.currentStreak;
+
+    // Se a sequência foi quebrada, os marcos acima dela podem ser celebrados de novo no recomeço.
+    const kept = appState.milestonesShown.filter(m => m <= streak);
+    let changed = kept.length !== appState.milestonesShown.length;
+    appState.milestonesShown = kept;
+
+    const reached = Object.keys(milestones).map(Number).filter(d => d <= streak).sort((a, b) => a - b);
+    const unseen = reached.filter(d => !appState.milestonesShown.includes(d));
+
+    if (unseen.length > 0) {
+        const highest = unseen[unseen.length - 1];
+        appState.milestonesShown.push(...unseen);
+        changed = true;
+        showMilestone(highest, milestones[highest]);
+    }
+    if (changed) saveState();
+}
+
+function showMilestone(days, message) {
+    document.getElementById('milestoneTitle').textContent = `${days} Dia${days > 1 ? 's' : ''} Limpo${days > 1 ? 's' : ''} Seguido${days > 1 ? 's' : ''}!`;
+    document.getElementById('milestoneMessage').textContent = message;
+    openModal('milestoneModal');
+}
+
+// =====================================================================
+// 6. INTERAÇÕES
 // =====================================================================
 
 function displayRandomQuote() {
     const getRandom = () => motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
     document.getElementById('quoteText').textContent = getRandom();
-    
+
     setInterval(() => {
         const quoteElement = document.getElementById('quoteText');
         quoteElement.style.opacity = '0';
@@ -335,148 +691,110 @@ function displayRandomQuote() {
 function renderTips(addictionType) {
     const tipsContainer = document.getElementById('tipsContent');
     const tipsList = addictionTips[addictionType] || addictionTips["outro"];
-    
-    let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
-    tipsList.forEach(tip => {
-        html += `
-            <div style="background-color: var(--surface); padding: 1.25rem; border-radius: 12px; border-left: 4px solid var(--primary); display: flex; align-items: flex-start; gap: 1rem; box-shadow: var(--shadow);">
-                <i class="ph ph-check-circle" style="color: var(--primary); font-size: 1.5rem; flex-shrink: 0;"></i>
-                <p style="margin: 0; color: var(--text-color); line-height: 1.5;">${tip}</p>
-            </div>
-        `;
-    });
-    html += '</div>';
-    tipsContainer.innerHTML = html;
+
+    tipsContainer.innerHTML = '<div class="tips-list">' + tipsList.map(tip => `
+        <div class="tip-card">
+            <i aria-hidden="true" class="ph ph-check-circle"></i>
+            <p>${escapeHTML(tip)}</p>
+        </div>`).join('') + '</div>';
 
     document.getElementById('dailyTipText').textContent = tipsList[Math.floor(Math.random() * tipsList.length)];
     document.getElementById('tipSection').style.display = 'block';
 }
 
-// Modificado para aceitar datas retroativas e sobrescrever registros antigos
 function markCleanDay(targetDate) {
-    let dateToMark = targetDate instanceof Date ? targetDate : new Date();
-    dateToMark.setHours(0, 0, 0, 0);
-    
-    // Se havia um tropeço neste dia, remove para dar lugar ao dia limpo
-    appState.stumbles = appState.stumbles.filter(s => {
-        const sd = new Date(s.date); sd.setHours(0,0,0,0);
-        return sd.getTime() !== dateToMark.getTime();
-    });
+    const dateToMark = startOfDay(targetDate instanceof Date ? targetDate : new Date());
 
-    const alreadyMarked = appState.dailyLog.some(d => {
-        const logDate = new Date(d.date); logDate.setHours(0, 0, 0, 0);
-        return logDate.getTime() === dateToMark.getTime() && d.type === 'clean';
-    });
-    
-    if (alreadyMarked) {
+    const alreadyMarked = appState.dailyLog.some(d => startOfDay(d.date).getTime() === dateToMark.getTime() && d.type === 'clean');
+    const hadStumble = appState.stumbles.some(s => startOfDay(s.date).getTime() === dateToMark.getTime());
+
+    if (alreadyMarked && !hadStumble) {
         showToast(`O dia ${formatDate(dateToMark)} já estava marcado como limpo!`);
         return;
     }
-    
-    appState.dailyLog.push({ date: dateToMark, type: 'clean' });
+
+    // Marcar como limpo substitui um tropeço registrado no mesmo dia.
+    appState.stumbles = appState.stumbles.filter(s => startOfDay(s.date).getTime() !== dateToMark.getTime());
+    if (!alreadyMarked) appState.dailyLog.push({ date: dateToMark, type: 'clean' });
+
     saveState();
     updateUI();
-    checkMilestones();
     showToast(`Dia ${formatDate(dateToMark)} marcado como limpo! 🌟`);
 }
 
 function logStumble() {
-    stumbleDateToLog = new Date(); // Registra tropeço para hoje por padrão
-    document.getElementById('stumbleModal').classList.add('active');
+    stumbleDateToLog = new Date();
+    openModal('stumbleModal');
 }
 
 function confirmStumble() {
     const environment = document.getElementById('environmentSelect').value;
     const note = document.getElementById('stumbleNote').value;
-    
-    const targetDate = stumbleDateToLog || new Date();
-    targetDate.setHours(0, 0, 0, 0);
-    
-    // Remove marcação de 'limpo' anterior desse dia, caso exista
-    appState.dailyLog = appState.dailyLog.filter(d => {
-        const ld = new Date(d.date); ld.setHours(0,0,0,0);
-        return ld.getTime() !== targetDate.getTime();
-    });
+    const targetDate = startOfDay(stumbleDateToLog || new Date());
 
-    // Remove tropeços anteriores desse mesmo dia para sobrescrever
-    appState.stumbles = appState.stumbles.filter(s => {
-        const sd = new Date(s.date); sd.setHours(0,0,0,0);
-        return sd.getTime() !== targetDate.getTime();
-    });
+    // Um tropeço substitui o dia limpo e qualquer tropeço anterior do mesmo dia.
+    appState.dailyLog = appState.dailyLog.filter(d => startOfDay(d.date).getTime() !== targetDate.getTime());
+    appState.stumbles = appState.stumbles.filter(s => startOfDay(s.date).getTime() !== targetDate.getTime());
+    appState.stumbles.push({ date: targetDate, environment, note });
 
-    appState.stumbles.push({ date: targetDate, environment: environment, note: note });
     saveState();
     updateUI();
-    
-    document.getElementById('stumbleModal').classList.remove('active');
+
+    closeModal('stumbleModal');
     document.getElementById('stumbleNote').value = '';
-    showToast(`Tropeço registrado no dia ${formatDate(targetDate)}.`);
+    showToast(`Tropeço registrado no dia ${formatDate(targetDate)}. Recomeçar faz parte.`);
     stumbleDateToLog = null;
 }
 
-// Injeção de Modal para Edição Retroativa pelo Calendário
 function injectDayEditModal() {
-    if(document.getElementById('dayEditModal')) return;
-    
-    const modalHTML = `
-    <div class="modal" id="dayEditModal">
-        <div class="modal-content" style="max-width: 400px; text-align: center;">
-            <button class="modal-close" onclick="document.getElementById('dayEditModal').classList.remove('active')">
-                <i class="ph ph-x"></i>
+    if (document.getElementById('dayEditModal')) return;
+
+    document.body.insertAdjacentHTML('beforeend', `
+    <div class="modal" id="dayEditModal" role="dialog" aria-modal="true" aria-labelledby="dayEditTitle">
+        <div class="modal-content modal-small">
+            <button class="modal-close" id="closeDayEditModal" aria-label="Fechar">
+                <i aria-hidden="true" class="ph ph-x"></i>
             </button>
             <h2 class="modal-title" id="dayEditTitle">Editar Dia</h2>
-            <p class="modal-description" style="margin-bottom: 1.5rem;">Como foi este dia?</p>
-            <div style="display: flex; flex-direction: column; gap: 1rem;">
-                <button class="btn btn-primary" id="btnEditClean" style="width: 100%;">
-                    <i class="ph ph-check-circle"></i> Marcar como Limpo
-                </button>
-                <button class="btn btn-danger" id="btnEditStumble" style="width: 100%; background: #D98A7F; color: white;">
-                    <i class="ph ph-warning-circle"></i> Registrar Tropeço
-                </button>
-                <button class="btn btn-secondary" id="btnEditClear" style="width: 100%;">
-                    <i class="ph ph-eraser"></i> Remover Registro
-                </button>
+            <p class="modal-description">Como foi este dia?</p>
+            <div class="day-edit-actions">
+                <button class="btn btn-primary" id="btnEditClean"><i aria-hidden="true" class="ph ph-check-circle"></i> Marcar como Limpo</button>
+                <button class="btn btn-danger" id="btnEditStumble"><i aria-hidden="true" class="ph ph-warning-circle"></i> Registrar Tropeço</button>
+                <button class="btn btn-secondary" id="btnEditClear"><i aria-hidden="true" class="ph ph-eraser"></i> Remover Registro</button>
             </div>
         </div>
-    </div>`;
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    </div>`);
+
+    document.getElementById('closeDayEditModal').addEventListener('click', () => closeModal('dayEditModal'));
 
     document.getElementById('btnEditClean').addEventListener('click', () => {
-        if(selectedDateForEdit) markCleanDay(selectedDateForEdit);
-        document.getElementById('dayEditModal').classList.remove('active');
+        const date = selectedDateForEdit;
+        closeModal('dayEditModal');
+        if (date) markCleanDay(date);
     });
 
     document.getElementById('btnEditStumble').addEventListener('click', () => {
-        if(selectedDateForEdit) {
-            stumbleDateToLog = selectedDateForEdit;
-            document.getElementById('dayEditModal').classList.remove('active');
-            document.getElementById('stumbleModal').classList.add('active');
-        }
+        if (!selectedDateForEdit) return;
+        stumbleDateToLog = selectedDateForEdit;
+        document.getElementById('dayEditModal').classList.remove('active');
+        openModal('stumbleModal');
     });
 
     document.getElementById('btnEditClear').addEventListener('click', () => {
-        if(selectedDateForEdit) {
-            clearSpecificDay(selectedDateForEdit);
-            document.getElementById('dayEditModal').classList.remove('active');
-        }
+        const date = selectedDateForEdit;
+        closeModal('dayEditModal');
+        if (date) clearSpecificDay(date);
     });
 }
 
 function clearSpecificDay(targetDate) {
-    targetDate.setHours(0,0,0,0);
-    appState.dailyLog = appState.dailyLog.filter(d => {
-        const ld = new Date(d.date); ld.setHours(0,0,0,0);
-        return ld.getTime() !== targetDate.getTime();
-    });
-    appState.stumbles = appState.stumbles.filter(s => {
-        const sd = new Date(s.date); sd.setHours(0,0,0,0);
-        return sd.getTime() !== targetDate.getTime();
-    });
+    const target = startOfDay(targetDate).getTime();
+    appState.dailyLog = appState.dailyLog.filter(d => startOfDay(d.date).getTime() !== target);
+    appState.stumbles = appState.stumbles.filter(s => startOfDay(s.date).getTime() !== target);
     saveState();
     updateUI();
     showToast(`Registro do dia ${formatDate(targetDate)} foi removido.`);
 }
-
 
 function saveJournal() {
     const content = document.getElementById('journalInput').value.trim();
@@ -484,66 +802,22 @@ function saveJournal() {
         showToast('Escreva algo antes de salvar!');
         return;
     }
-    
-    appState.journals.push({ date: new Date(), content: content });
+    appState.journals.push({ date: new Date(), content });
     document.getElementById('journalInput').value = '';
     saveState();
     updateUI();
     showToast('Anotação salva com sucesso! ✍️');
 }
 
-function checkMilestones() {
-    const cleanDays = appState.cleanDays;
-    for (const [days, message] of Object.entries(milestones)) {
-        const daysNum = parseInt(days);
-        if (cleanDays === daysNum && !appState.milestonesShown.includes(daysNum)) {
-            showMilestone(daysNum, message);
-            appState.milestonesShown.push(daysNum);
-            saveState();
-            break;
-        }
-    }
-}
-
-function showMilestone(days, message) {
-    const modal = document.getElementById('milestoneModal');
-    document.getElementById('milestoneTitle').textContent = `${days} Dia${days > 1 ? 's' : ''} Limpo${days > 1 ? 's' : ''}!`;
-    document.getElementById('milestoneMessage').textContent = message;
-    modal.classList.add('active');
-}
-
-function showToast(message) {
-    const toast = document.getElementById('toast');
-    document.getElementById('toastMessage').textContent = message;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-function resetData() {
-    if (confirm('Tem certeza que deseja apagar todos os dados? Esta ação não pode ser desfeita.')) {
-        localStorage.removeItem('recoveryTrackerState');
-        localStorage.removeItem('userRecoveryAddiction');
-        localStorage.removeItem('userRecoveryAddictionName');
-        appState = { startDate: new Date(), cleanDays: 0, totalDays: 0, stumbles: [], journals: [], dailyLog: [], lastCheckedDate: new Date(), milestonesShown: [] };
-        saveState();
-        window.location.reload();
-    }
-}
-
-function formatDate(date) {
-    const d = new Date(date);
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-}
-
 // =====================================================================
-// 5. EXTENSÃO: SUPORTE A PRIVACIDADE E REMOÇÃO DE REGISTROS
+// 7. PRIVACIDADE (OCULTAR O VÍCIO NA TELA)
 // =====================================================================
 
 function togglePrivacy() {
     const bannerText = document.getElementById('addictionText');
     const eyeIcon = document.getElementById('privacyEyeIcon');
     const currentAddictionSetting = document.getElementById('currentAddiction');
-    
+
     if (!bannerText) return;
 
     if (privacyState.isHidden) {
@@ -561,95 +835,56 @@ function togglePrivacy() {
     }
 }
 
-window.deleteHistoryEntry = function(type, timestamp) {
-    if (!confirm("Tem certeza que deseja apagar este registro permanentemente?")) return;
-
-    const saved = localStorage.getItem('recoveryTrackerState');
-    if (!saved) return;
-    
-    let state = JSON.parse(saved);
-    const targetTime = new Date(timestamp).getTime();
-
-    if (type === 'journal') {
-        state.journals = state.journals.filter(j => new Date(j.date).getTime() !== targetTime);
-    } else if (type === 'stumble') {
-        state.stumbles = state.stumbles.filter(s => new Date(s.date).getTime() !== targetTime);
-    }
-
-    localStorage.setItem('recoveryTrackerState', JSON.stringify(state));
-    appState.journals = state.journals.map(j => ({ ...j, date: new Date(j.date) }));
-    appState.stumbles = state.stumbles.map(s => ({ ...s, date: new Date(s.date) }));
-
-    updateUI();
-    showToast('Registro removido com sucesso.');
-};
-
-function injectDeleteButtons() {
-    const historyList = document.getElementById('historyList');
-    if (!historyList) return;
-
-    const items = historyList.querySelectorAll('.history-item');
-    const saved = localStorage.getItem('recoveryTrackerState');
-    if (!saved) return;
-    const state = JSON.parse(saved);
-    
-    const allEntries = [
-        ...state.journals.map(j => ({ ...j, type: 'journal' })),
-        ...state.stumbles.map(s => ({ ...s, type: 'stumble' }))
-    ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
-
-    items.forEach((item, index) => {
-        const entry = allEntries[index];
-        if (!entry || item.querySelector('.btn-delete-entry')) return;
-
-        const header = item.querySelector('.history-header');
-        if (header) {
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'btn-delete-entry';
-            deleteBtn.style = "background: none; border: none; color: #dc3545; cursor: pointer; padding: 4px 8px; margin-left: auto; display: inline-flex; align-items: center;";
-            deleteBtn.innerHTML = '<i class="ph ph-trash" style="font-size: 1.2rem;"></i>';
-            deleteBtn.title = "Apagar este registro";
-
-            deleteBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                window.deleteHistoryEntry(entry.type, entry.date);
-            });
-            header.appendChild(deleteBtn);
-        }
-    });
-}
-
 // =====================================================================
-// 6. MAPEAMENTO DE EVENTOS E LISTENERS
+// 8. EVENTOS
 // =====================================================================
 
 function setupEventListeners() {
-    document.getElementById('markCleanDayBtn').addEventListener('click', markCleanDay);
-    document.getElementById('logStumbleBtn').addEventListener('click', logStumble);
-    document.getElementById('saveJournalBtn').addEventListener('click', saveJournal);
-    document.getElementById('confirmStumbleBtn').addEventListener('click', confirmStumble);
-    
-    document.getElementById('closeStumbleModal').addEventListener('click', () => document.getElementById('stumbleModal').classList.remove('active'));
-    document.getElementById('closeMilestoneModal').addEventListener('click', () => document.getElementById('milestoneModal').classList.remove('active'));
-    document.getElementById('closeCelebrationBtn').addEventListener('click', () => document.getElementById('milestoneModal').classList.remove('active'));
-    
-    document.getElementById('settingsBtn').addEventListener('click', () => document.getElementById('settingsModal').classList.add('active'));
-    document.getElementById('closeSettingsModal').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('active'));
-    document.getElementById('resetDataBtn').addEventListener('click', resetData);
-    
-    // Ouvintes da extensão de Dicas
-    document.getElementById('tipsBtn').addEventListener('click', () => document.getElementById('tipsModal').classList.add('active'));
-    document.getElementById('moreTipsBtn').addEventListener('click', () => document.getElementById('tipsModal').classList.add('active'));
-    document.getElementById('closeTipsModal').addEventListener('click', () => document.getElementById('tipsModal').classList.remove('active'));
+    const $ = id => document.getElementById(id);
+
+    $('markCleanDayBtn').addEventListener('click', () => markCleanDay());
+    $('logStumbleBtn').addEventListener('click', logStumble);
+    $('saveJournalBtn').addEventListener('click', saveJournal);
+    $('confirmStumbleBtn').addEventListener('click', confirmStumble);
+
+    $('closeStumbleModal').addEventListener('click', () => closeModal('stumbleModal'));
+    $('closeMilestoneModal').addEventListener('click', () => closeModal('milestoneModal'));
+    $('closeCelebrationBtn').addEventListener('click', () => closeModal('milestoneModal'));
+
+    $('settingsBtn').addEventListener('click', () => openModal('settingsModal'));
+    $('closeSettingsModal').addEventListener('click', () => closeModal('settingsModal'));
+    $('resetDataBtn').addEventListener('click', resetData);
+
+    $('exportDataBtn').addEventListener('click', exportData);
+    $('importDataBtn').addEventListener('click', () => $('importFileInput').click());
+    $('importFileInput').addEventListener('change', e => {
+        importData(e.target.files[0]);
+        e.target.value = '';
+    });
+
+    $('prevMonthBtn').addEventListener('click', () => changeMonth(-1));
+    $('nextMonthBtn').addEventListener('click', () => changeMonth(1));
+    $('todayMonthBtn').addEventListener('click', goToCurrentMonth);
+    setupCalendarSwipe();
+
+    $('tipsBtn').addEventListener('click', () => openModal('tipsModal'));
+    $('moreTipsBtn').addEventListener('click', () => openModal('tipsModal'));
+    $('closeTipsModal').addEventListener('click', () => closeModal('tipsModal'));
+
+    // Apagar itens do histórico (delegação: funciona para itens renderizados depois)
+    $('historyList').addEventListener('click', e => {
+        const btn = e.target.closest('.btn-delete-entry');
+        if (btn) deleteHistoryEntry(btn.dataset.type, Number(btn.dataset.ts));
+    });
 
     document.querySelectorAll('.modal').forEach(modal => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) modal.classList.remove('active');
+        modal.addEventListener('click', e => {
+            if (e.target === modal && canDismissModal(modal)) closeModal(modal.id);
         });
     });
+    document.addEventListener('keydown', handleModalKeydown);
 }
 
-// Inicializações Assíncronas e DOM
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
 
@@ -659,9 +894,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const customGroup = document.getElementById('customAddictionGroup');
     const customInput = document.getElementById('customAddiction');
     const banner = document.getElementById('addictionBanner');
-    const tipsModal = document.getElementById('tipsModal');
 
-    addictionSelect.addEventListener('change', (e) => {
+    addictionSelect.addEventListener('change', e => {
         customGroup.style.display = e.target.value === 'outro' ? 'block' : 'none';
     });
 
@@ -670,7 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let selectedText = addictionSelect.options[addictionSelect.selectedIndex]?.text;
 
         if (selectedValue === 'outro') {
-            selectedText = customInput.value.trim() !== '' ? customInput.value : "Meu Desafio";
+            selectedText = customInput.value.trim() !== '' ? customInput.value.trim() : "Meu Desafio";
         }
         if (!selectedValue) {
             selectedValue = "outro";
@@ -680,81 +914,54 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('userRecoveryAddiction', selectedValue);
         localStorage.setItem('userRecoveryAddictionName', selectedText);
 
-        if (welcomeModal) welcomeModal.classList.remove('active');
-        if (banner) banner.style.display = 'flex';
+        welcomeModal.classList.remove('active');
+        banner.style.display = 'flex';
         privacyState.actualText = selectedText;
+        privacyState.isHidden = true;
         togglePrivacy();
 
         renderTips(selectedValue);
-        if (tipsModal) tipsModal.classList.add('active');
+        openModal('tipsModal');
     });
 
-    // Injeção limpa do botão de privacidade (Olho)
-    const bannerContent = banner ? banner.querySelector('.banner-content') : null;
+    // Botão de privacidade (olho) no banner
+    const bannerContent = banner.querySelector('.banner-content');
     if (bannerContent && !document.getElementById('privacyEyeBtn')) {
         const eyeBtn = document.createElement('button');
         eyeBtn.id = "privacyEyeBtn";
-        eyeBtn.style = "background: none; border: none; color: inherit; cursor: pointer; margin-left: 10px; display: inline-flex; align-items: center;";
-        eyeBtn.innerHTML = '<i id="privacyEyeIcon" class="ph ph-eye-slash" style="font-size: 1.2rem;"></i>';
+        eyeBtn.className = "privacy-eye-btn";
+        eyeBtn.type = "button";
+        eyeBtn.setAttribute('aria-label', 'Mostrar ou ocultar o que você está vencendo');
+        eyeBtn.innerHTML = '<i id="privacyEyeIcon" aria-hidden="true" class="ph ph-eye-slash"></i>';
         bannerContent.appendChild(eyeBtn);
-        
-        const toggleHandler = (e) => {
+
+        const toggleHandler = e => {
             e.stopPropagation();
             privacyState.isHidden = !privacyState.isHidden;
             togglePrivacy();
         };
         eyeBtn.addEventListener('click', toggleHandler);
-        
-        const textElement = document.getElementById('addictionText');
-        if (textElement) textElement.addEventListener('click', toggleHandler);
-    }
-
-    const textObserver = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            if (mutation.type === "childList" && mutation.target.id === "addictionText") {
-                const currentText = mutation.target.textContent;
-                if (currentText && !currentText.includes("Conteúdo Oculto") && !currentText.startsWith("Vencendo:")) {
-                    privacyState.actualText = currentText.replace("Vencendo: ", "");
-                    togglePrivacy();
-                }
-            }
-        });
-    });
-
-    const targetText = document.getElementById('addictionText');
-    if (targetText) textObserver.observe(targetText, { childList: true });
-
-    const historyList = document.getElementById('historyList');
-    if (historyList) {
-        const historyObserver = new MutationObserver(() => injectDeleteButtons());
-        historyObserver.observe(historyList, { childList: true });
+        document.getElementById('addictionText').addEventListener('click', toggleHandler);
     }
 
     const savedAddiction = localStorage.getItem('userRecoveryAddiction');
     const savedAddictionName = localStorage.getItem('userRecoveryAddictionName');
-    
+
     if (savedAddiction) {
-        if (welcomeModal) welcomeModal.classList.remove('active');
-        if (banner) banner.style.display = 'flex';
-        privacyState.actualText = savedAddictionName;
+        welcomeModal.classList.remove('active');
+        banner.style.display = 'flex';
+        privacyState.actualText = savedAddictionName || '';
         togglePrivacy();
         renderTips(savedAddiction);
     } else {
-        if (welcomeModal) welcomeModal.classList.add('active');
-        if (banner) banner.style.display = 'none';
+        welcomeModal.classList.add('active');
+        banner.style.display = 'none';
     }
 
     const openWelcomeModal = () => {
-        if (welcomeModal) welcomeModal.classList.add('active');
-        const settings = document.getElementById('settingsModal');
-        if (settings) settings.classList.remove('active');
+        closeModal('settingsModal');
+        openModal('welcomeModal');
     };
-    
-    const changeBtn = document.getElementById('changeAddictionBtn');
-    if (changeBtn) changeBtn.addEventListener('click', openWelcomeModal);
-    
-    const editBtn = document.getElementById('editAddictionBtn');
-    if (editBtn) editBtn.addEventListener('click', openWelcomeModal);
-    
-    injectDeleteButtons();
+    document.getElementById('changeAddictionBtn').addEventListener('click', openWelcomeModal);
+    document.getElementById('editAddictionBtn').addEventListener('click', openWelcomeModal);
 });

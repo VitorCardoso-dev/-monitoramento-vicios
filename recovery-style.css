@@ -188,7 +188,7 @@ body {
 
 .stats-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 1rem;
 }
 
@@ -433,17 +433,22 @@ body {
 /* Calendar Grid */
 .calendar-grid {
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     gap: 0.5rem;
     margin-bottom: 1rem;
+    touch-action: pan-y;
 }
 
 .calendar-day {
     aspect-ratio: 1;
+    border: none;
+    font-family: inherit;
     border-radius: 0.5rem;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    line-height: 1.1;
     font-size: 0.75rem;
     font-weight: 600;
     transition: transform 0.2s ease;
@@ -524,6 +529,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.5rem;
     margin-bottom: 0.75rem;
 }
 
@@ -550,6 +556,8 @@ body {
 }
 
 .history-content {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     color: #6E7A73;
     font-size: 0.95rem;
     line-height: 1.6;
@@ -840,7 +848,7 @@ body {
     }
 
     .stats-row {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
         gap: 0.75rem;
     }
 
@@ -848,8 +856,9 @@ body {
         grid-template-columns: 1fr;
     }
 
-    .calendar-grid {
-        grid-template-columns: repeat(7, 1fr);
+    .calendar-grid,
+    .calendar-weekdays {
+        gap: 0.35rem;
     }
 
     .modal-content {
@@ -866,7 +875,225 @@ body {
         font-size: 3rem;
     }
 
-    .calendar-grid {
-        grid-template-columns: repeat(5, 1fr);
+    .calendar-grid,
+    .calendar-weekdays {
+        gap: 0.25rem;
     }
+
+    .calendar-day {
+        font-size: 0.7rem;
+    }
+}
+
+
+/* ---------- Acessibilidade e foco ---------- */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+    outline: 3px solid #5E7F5B;
+    outline-offset: 2px;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+/* ---------- Calendário ---------- */
+.day-mark {
+    font-size: 0.6rem;
+    font-weight: 700;
+}
+
+.calendar-day.day-disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.calendar-day.day-disabled:hover {
+    transform: none;
+}
+
+/* ---------- Dicas (antes usavam variáveis CSS que não existiam) ---------- */
+.tips-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tip-card {
+    background-color: white;
+    padding: 1.25rem;
+    border-radius: 12px;
+    border-left: 4px solid #8BA888;
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    box-shadow: 0 4px 16px rgba(51, 63, 56, 0.05);
+}
+
+.tip-card i {
+    color: #8BA888;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.tip-card p {
+    margin: 0;
+    color: #333F38;
+    line-height: 1.5;
+}
+
+/* ---------- Caixa de ajuda ---------- */
+.help-box {
+    margin-top: 1.5rem;
+    padding: 1rem 1.25rem;
+    background: #F1F4EF;
+    border: 1px solid #DDE5D9;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    color: #333F38;
+}
+
+.help-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.help-box ul {
+    padding-left: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.help-note {
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
+    color: #6E7A73;
+}
+
+/* ---------- Histórico, privacidade, modais e configurações ---------- */
+.btn-delete-entry {
+    background: none;
+    border: none;
+    color: #B94A3E;
+    cursor: pointer;
+    padding: 4px 8px;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    font-size: 1.2rem;
+}
+
+.privacy-eye-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    margin-left: 10px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 1.2rem;
+}
+
+.modal-small {
+    max-width: 400px;
+    text-align: center;
+}
+
+.day-edit-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.settings-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+/* ---------- Calendário mensal ---------- */
+.calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.calendar-nav-center {
+    text-align: center;
+    flex: 1;
+}
+
+.calendar-month {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #333F38;
+}
+
+.calendar-summary {
+    font-size: 0.8rem;
+    color: #6E7A73;
+}
+
+.calendar-nav-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 1px solid #E8E6E1;
+    background: white;
+    color: #333F38;
+    font-size: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.calendar-nav-btn:hover:not(:disabled) {
+    background: #F1F4EF;
+    transform: scale(1.05);
+}
+
+.calendar-nav-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6E7A73;
+}
+
+.calendar-blank {
+    aspect-ratio: 1;
+}
+
+.calendar-day.day-today {
+    outline: 2px solid #333F38;
+    outline-offset: 2px;
+}
+
+.calendar-today-btn {
+    display: block;
+    margin: 0 auto 1rem;
 }
